@@ -24,15 +24,15 @@ class GenerateKey:
     def __init__(self):
         pass
 
-    def generateKeyDefult(self):
+    def generateKeyDefult(self, data):
         # generate a random 1000-bits string then do sha256 to get private key, public key and address
-        seed = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+=-"
-        random_chars = []
-        for i in range(1000):
-            random_chars.append(random.choice(seed))
-        random_string = ''.join(random_chars)
+        # seed = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+=-"
+        # random_chars = []
+        # for i in range(1000):
+        #     random_chars.append(random.choice(seed))
+        # random_string = ''.join(random_chars)
         # generate private key through sha256
-        private_key_hex = hashlib.sha256(random_string.encode('ascii')).hexdigest()
+        private_key_hex = hashlib.sha256(data.encode('ascii')).hexdigest()
 
         # generate private key wif format
         private_key_hex_wif_unencode = '80' + private_key_hex + '01'
