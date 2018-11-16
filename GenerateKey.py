@@ -21,10 +21,8 @@ def get_address(public_key):
 
 class GenerateKey:
 
-    def __init__(self):
-        pass
-
-    def generateKeyDefult(self):
+    @classmethod
+    def generate_key(self):
         # generate a random 1000-bits string then do sha256 to get private key, public key and address
         seed = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+=-"
         random_chars = []
@@ -45,14 +43,8 @@ class GenerateKey:
         x_str = ecdsa.util.number_to_string(p.x(), order)
         y_str = ecdsa.util.number_to_string(p.y(), order)
         compressed_public_key_hex = hexlify(bytes(chr(2 + (p.y() & 1)), 'ascii') + x_str).decode('ascii')
-        uncompressed_public_key_hex = hexlify(bytes(chr(4), 'ascii') + x_str + y_str).decode('ascii')
 
         # generate address through public key
         address = get_address(compressed_public_key_hex)
 
-        return private_key_hex, private_key_hex_wif, compressed_public_key_hex, uncompressed_public_key_hex, address
-
-
-
-    def genrateKeyByGUI(self):
-        pass
+        return private_key_hex, compressed_public_key_hex, address
