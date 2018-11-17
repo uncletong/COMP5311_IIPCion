@@ -1,11 +1,14 @@
 import GenerateKey
 import Transaction
 import sys
+import json
+import socket
 
 
 class User:
 
     def __init__(self, private_key=None, public_key=None, address=None):
+        self.transaction = None
         if not private_key:
             key = GenerateKey.GenerateKey()
             self.private_key, self.public_key, self.address = key.generate_key()
@@ -15,13 +18,12 @@ class User:
             self.address = address
 
     def generate_transaction(self, dest_addresses, amounts, ip=None, port=None):
-        transaction = Transaction.Transaction(self.address, dest_addresses, amounts)
+        self.transaction = Transaction.Transaction(self.address, dest_addresses, amounts)
         # send to miner
 
 
 if len(sys.argv) > 1:
     if sys.argv[1] == '-c' or '-create':
-        mode = 'c'
         user = User()
         print('your private_key is: ')
         print(user.private_key)
@@ -30,7 +32,6 @@ if len(sys.argv) > 1:
         print('your address is:')
         print(user.address)
     elif sys.argv[1] == '-p' or 'private' or 'private_key':
-        mode = 'p'
         user = User(sys.argv[2], sys.argv[3], sys.argv[4])
     elif sys.argv[1] == '-h' or '-help':
         print('usage: User {-c, -p private_key public_key address}')
@@ -53,6 +54,19 @@ while True:
     port = int(port)
     amount = list(map(int, amount))
     user.generate_transaction(destination_address, amount)
-    print(user)
+    user.transaction.signature()
+    print(user.transaction)
+
+    transaction_json = json.dumps(user.transaction)
+    print(transaction_json)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip,port))
+    try:
+        s.sendall(repr(transaction_json).encode('utf-8'))
+        receive_message = s.recv(1024).decode()
+        print(receive_message)
+    finally:
+        s.close()
+
 
 
