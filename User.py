@@ -17,7 +17,7 @@ class User:
             self.public_key = public_key
             self.address = address
 
-    def generate_transaction(self, dest_addresses, amounts, ip=None, port=None):
+    def generate_transaction(self, dest_addresses, amounts):
         self.transaction = Transaction.Transaction(self.address, dest_addresses, amounts)
         # send to miner
 
@@ -60,13 +60,10 @@ while True:
     transaction_json = json.dumps(user.transaction)
     print(transaction_json)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((ip,port))
+    s.connect((ip, port))
     try:
-        s.sendall(repr(transaction_json).encode('utf-8'))
+        s.sendall(transaction_json)
         receive_message = s.recv(1024).decode()
         print(receive_message)
     finally:
         s.close()
-
-
-
