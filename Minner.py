@@ -117,7 +117,7 @@ while True:
         block['prev_hash'] = collection.find_one({'index': chain_len})['hash']
         # cal time is around 60s using this target
         block['target'] = '000000'
-        block['transaction'] = transaction_pool[0:8]
+        block['transactions'] = transaction_pool[0:8]
         for i in range(0,8):
             transaction_pool.pop(i)
         block_hash, block_nonce = proof_of_work(block['target'], block)
