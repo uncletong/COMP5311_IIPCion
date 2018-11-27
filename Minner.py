@@ -7,25 +7,27 @@ import random
 import pymongo
 from hashlib import sha256
 
-import Host
-from User import User
+import Merkle2
+import GenerateKey
+
+transaction_pool = list()
+#  neighbour
 
 
 class Miner:
 
-    def __init__(self, port, address):
-        self.address = address
+    def __init__(self, port, temp_address):
+        self.address = temp_address
         self.transaction_pool = []
         self.port = port
-        self.ip = socket.gethostbyname(socket.gethostname())
         self.neighbours = []
 
-    def add_neighbour(self, ip, port):
-        for neighbor in self.neighbours:
-            if ip == neighbor.ip:
-                neighbor.add_port(port)
-                return
-        self.neighbours.append(Host.Host(ip, port))
+    # def add_neighbour(self, ip, port):
+    #     for neighbor in self.neighbours:
+    #         if ip == neighbor.ip:
+    #             neighbor.add_port(port)
+    #             return
+    #     self.neighbours.append({'ip':ip,'port':port})
 
     def remove_neighbour(self, ip, port=None):
         if port:
@@ -34,56 +36,90 @@ class Miner:
             self.neighbours[self.neighbours.index(ip)].remove_port(port)
 
 
-def listen_transaction(ip, port, transaction_pool):
+def listen_transaction(ip, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((ip, port))
     s.listen(3)
+    print('---server turned on in ' + ip + ':' + str(port) + '---')
     while True:
-        conn, address = s.accept()
-        data = conn.recv(10024)
-        flag = 0
+        conn, add = s.accept()
+        data = conn.recv(10024).decode()
+        print('----done---')
+        print(data)
         if len(data.strip()) == 0:
             conn.sendall('no transaction'.encode('utf-8'))
+            continue
         else:
-            rec_transaction = json.loads(data)
+            pub_key = data[-128:]
+            transaction = data.strip(public_key)
+            print('---public key---')
+            print(public_key)
+            rec_transaction = json.loads(transaction)
+            flag = False
             for temp_transaction in transaction_pool:
                 if temp_transaction['sour_address'] == rec_transaction['sour_address']:
                     conn.sendall('duplicate transaction'.encode('utf-8'))
-                    flag = 1
+                    flag = True
                     break
             if flag:
-                transaction_pool.append(rec_transaction)
-                conn.sendall('success'.encode('utf-8'))
-                # verify transaction
+                continue
+            temp_transaction = chain.find({'transactions.dest_address': rec_transaction['sour_address']}, {'transactions.amount.$': 1})
+
+            # find last transaction
+            temp = None
+            for temp in temp_transaction:
+                pass
+
+            if not temp:
+                conn.sendall('this address not in system'.encode())
+                continue
+            elif temp['transactions'][0]['amount'] < (sum(rec_transaction['amount'])):
+                conn.sendall(('no enough balance, balance:' + str(temp['transactions'][0]['amount'])).encode())
+                continue
+            else:
+                # two times verify
+                if not GenerateKey.verify_public_key(public_key=pub_key, address=rec_transaction['sour_address']):
+                    conn.sendall('public key verify fail'.encode())
+                    continue
+                elif not GenerateKey.verify_sign(public_key=pub_key, sign=rec_transaction['signature'], data=(str(rec_transaction['sour_address']) + str(rec_transaction['dest_address']) + str(rec_transaction['amount']))):
+                    print('---data---')
+                    print((str(rec_transaction['sour_address']) + str(rec_transaction['dest_address']) + str(rec_transaction['amount'])))
+                    conn.sendall('sign verify fail'.encode())
+                    continue
+                else:
+                    transaction_pool.append(rec_transaction)
+                    print('success, transaction pool len: ' + str(len(transaction_pool)))
+                    conn.sendall('success'.encode('utf-8'))
 
 
 def proof_of_work(target, temp_block):
     nonce = int(20000000 * random.random())
     block_str = str(temp_block) + str(nonce)
     while True:
-        block_hash = sha256(block_str.encode()).hexdigest()
-        block_target = block_hash[-6:]
+        temp_hash = sha256(block_str.encode()).hexdigest()
+        block_target = temp_hash[-6:]
         if block_target == target:
             break
         else:
             nonce = nonce + 1
-    return block_hash, nonce
+    return temp_hash, nonce
 
 
-if len(sys.argv) > 3:
-    if sys.argv[3] == '-c' or '-create':
-        user = User()
-        miner = Miner(sys.argv[2], user.address)
+if len(sys.argv) > 1:
+    if sys.argv[1] == '-c':
+        key = GenerateKey.GenerateKey()
+        private_key, public_key, address = key.generate_key()
+        miner = Miner(int(sys.argv[3]), address)
         print('your private_key is: ')
-        print(user.private_key)
+        print(private_key)
         print('your public_key is: ')
-        print(user.public_key)
+        print(public_key)
         print('your address is:')
-        print(user.address)
-    elif sys.argv[3] == '-a' or '-address':
+        print(address)
+    elif sys.argv[1] == '-a':
         miner = Miner(sys.argv[2], sys.argv[4])
-    elif sys.argv[1] == '-h' or '-help':
-        print('usage: User {-p port} {}')
+    elif sys.argv[1] == '-h':
+        print('usage: {-c,-a}{-p port} {}')
         print('-c: create keys')
         print('-p: port')
         print('-a input address')
@@ -96,12 +132,12 @@ else:
 
 # connect to database
 client = pymongo.MongoClient(host='localhost', port=27017)
-db = client.blockchian
-collection = db.chain
-transaction_pool =[]
+db = client.block_chain
+chain = db.chain
+tree = db.tree
 try:
     # start a new thread to listen transactions
-    _thread.start_new_thread(listen_transaction, (miner.ip, miner.port, transaction_pool))
+    _thread.start_new_thread(listen_transaction, ('', miner.port))
 except:
     print('thread start error')
 
@@ -111,16 +147,22 @@ while True:
         time.sleep(60)
     else:
         block = dict()
-        chain_len = collection.find().count()
+        chain_len = chain.find().count()
         block['index'] = chain_len + 1
         block['time_stamp'] = time.time()
-        block['prev_hash'] = collection.find_one({'index': chain_len})['hash']
+        block['prev_hash'] = chain.find_one({'index': chain_len})['hash']
         # cal time is around 60s using this target
         block['target'] = '000000'
-        block['transactions'] = transaction_pool[0:8]
-        for i in range(0,8):
+        transactions = transaction_pool[0:7]
+        transactions.append({'sour_address': None, 'dest_address': miner.address, 'amount': 20})
+        block['transactions'] = transaction_pool[0:7]
+        merkle_tree = Merkle2.Merkletree(block['transactions'])
+        merkle_tree.Make_a_tree()
+        block['merkel_root'] = merkle_tree.Get_Root()
+        for i in range(0, 7):
             transaction_pool.pop(i)
         block_hash, block_nonce = proof_of_work(block['target'], block)
         block['hash'] = block_hash
         block['nonce'] = block_nonce
-        collection.insert_one(block)
+        chain.insert_one(block)
+        tree.insert_one(merkle_tree.Get_all_hash())
