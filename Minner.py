@@ -94,14 +94,19 @@ def listen_transaction(ip, port):
 
 def proof_of_work(target, temp_block):
     nonce = int(20000000 * random.random())
-    block_str = str(temp_block) + str(nonce)
+    local_time = time.asctime(time.localtime(time.time()))
+    print('---start time: ' + local_time + '---')
     while True:
+        block_str = str(temp_block) + str(nonce)
         temp_hash = sha256(block_str.encode()).hexdigest()
-        block_target = temp_hash[-6:]
+        block_target = temp_hash[-4:]
         if block_target == target:
             break
         else:
             nonce = nonce + 1
+
+    local_time = time.asctime(time.localtime(time.time()))
+    print('---end time: ' + local_time + '---')
     return temp_hash, nonce
 
 
@@ -142,8 +147,10 @@ except:
     print('thread start error')
 
 while True:
-    if len(transaction_pool) < 8:
+    if len(transaction_pool) < 7:
         # if number of transaction is less than 8, sleep one minute
+        print('---have checked the transaction pool---')
+        print('length of transaction pool: ' + str(len(transaction_pool)))
         time.sleep(60)
     else:
         block = dict()
@@ -152,17 +159,23 @@ while True:
         block['time_stamp'] = time.time()
         block['prev_hash'] = chain.find_one({'index': chain_len})['hash']
         # cal time is around 60s using this target
-        block['target'] = '000000'
+        block['target'] = '0000'
         transactions = transaction_pool[0:7]
         transactions.append({'sour_address': None, 'dest_address': miner.address, 'amount': 20})
-        block['transactions'] = transaction_pool[0:7]
-        merkle_tree = Merkle2.Merkletree(block['transactions'])
+        block['transactions'] = transactions
+        transactions_string = list()
+        for transaction in transactions:
+            transactions_string.append(str(transaction))
+
+        merkle_tree = Merkle2.Merkletree(transactions_string)
         merkle_tree.Make_a_tree()
         block['merkel_root'] = merkle_tree.Get_Root()
         for i in range(0, 7):
-            transaction_pool.pop(i)
+            transaction_pool.pop(6 - i)
+        print('---start to mining---')
         block_hash, block_nonce = proof_of_work(block['target'], block)
         block['hash'] = block_hash
         block['nonce'] = block_nonce
+        print('---end of mining---')
         chain.insert_one(block)
         tree.insert_one(merkle_tree.Get_all_hash())
