@@ -20,7 +20,6 @@ class Miner:
         self.address = temp_address
         self.transaction_pool = []
         self.port = port
-        self.neighbours = []
 
     # def add_neighbour(self, ip, port):
     #     for neighbor in self.neighbours:
@@ -29,11 +28,125 @@ class Miner:
     #             return
     #     self.neighbours.append({'ip':ip,'port':port})
 
-    def remove_neighbour(self, ip, port=None):
-        if port:
-            self.neighbours.remove(self.neighbours.index(ip))
+    # def remove_neighbour(self, ip, port=None):
+    #     if port:
+    #         self.neighbours.remove(self.neighbours.index(ip))
+    #     else:
+    #         self.neighbours[self.neighbours.index(ip)].remove_port(port)
+
+
+def broadcast_transaction(temp_transaction):
+    for temp_ip in neighbour_ip:
+        temp_port = neighbour_port[neighbour_ip.index(temp_ip)]
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((temp_ip, temp_port))
+        s.sendall(temp_transaction)
+        s.close()
+
+
+def broadcast_block(temp_block):
+    json_block = json.dumps(temp_block)
+    for temp_ip in neighbour_ip:
+        temp_port = 8887
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((temp_ip, temp_port))
+        print('---broadcast block---')
+        print(json_block)
+        print('---broadcast block---')
+        s.sendall(json_block.encode())
+        s.close()
+
+
+def get_neighbours():
+    file = open('neighbour.txt')
+    data = file.readline()
+    while data:
+        ip, port = data.split(' ')
+        neighbour_ip.append(ip)
+        neighbour_port.append(int(port.strip('\n')))
+        data = file.readline()
+    print(neighbour_ip)
+    print(neighbour_port)
+
+
+def request(temp_key):
+    ip = '159.203.74.214'
+    port = 8889
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip, port))
+    s.send(temp_key.encode())
+    data = s.recv(10020).decode()
+    while data:
+        print('---receive ' + temp_key + '---')
+        data = json.loads(data)
+        print(data)
+        if temp_key == 'chain':
+            chain.insert_one(data)
+        elif temp_key == 'tree':
+            tree.insert_one(data)
+        data = s.recv(10020).decode()
+
+
+def listen_block_request(ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((ip, port))
+    s.listen(3)
+    print('---block request listening---')
+    while True:
+        conn, add = s.accept()
+        req = conn.recv(1024).decode()
+        print('---received block request---')
+        if req == 'chain':
+            blocks = chain.find()
+            for temp_block in blocks:
+                del temp_block['_id']
+                block_json = json.dumps(temp_block, default=lambda obj: obj.__dict__, sort_keys=False, indent=4)
+                print(block_json)
+                conn.sendall(block_json.encode())
+            conn.close()
+        elif req == 'tree':
+            trees = tree.find()
+            for temp_tree in trees:
+                del temp_tree['_id']
+                tree_json = json.dumps(temp_tree, default=lambda obj: obj.__dict__, sort_keys=False, indent=4)
+                print(tree_json)
+                conn.sendall(tree_json.encode())
+            conn.close()
         else:
-            self.neighbours[self.neighbours.index(ip)].remove_port(port)
+            conn.close()
+
+
+def listen_block(ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((ip, port))
+    s.listen(3)
+    print('---block listening---')
+    while True:
+        conn, add = s.accept()
+        temp_block = conn.recv(10024).decode()
+        print('---received block---')
+        print(temp_block)
+        temp_block = json.loads(temp_block)
+        chain_length = chain.find().count()
+        # it means system have mined the chain first
+        if temp_block['index'] <= chain_length:
+            print('---broadcast too late---')
+            conn.close()
+            continue
+        else:
+            temp_hash = temp_block['hash']
+            del temp_block['hash']
+            if temp_hash == sha256(str(temp_block).encode()).hexdigest():
+                temp_block['hash'] = temp_hash
+                if temp_block['index'] <= chain.find().count():
+                    print('---broadcast too late---')
+                    continue
+                chain.insert_one(temp_block)
+                print('---have verified the block and store---')
+                conn.close()
+            else:
+                print('---verify fail---')
+                conn.close()
 
 
 def listen_transaction(ip, port):
@@ -51,10 +164,10 @@ def listen_transaction(ip, port):
             continue
         else:
             pub_key = data[-128:]
-            transaction = data.strip(public_key)
+            re_transaction = data.strip(public_key)
             print('---public key---')
-            print(public_key)
-            rec_transaction = json.loads(transaction)
+            print(pub_key)
+            rec_transaction = json.loads(re_transaction)
             flag = False
             for temp_transaction in transaction_pool:
                 if temp_transaction['sour_address'] == rec_transaction['sour_address']:
@@ -88,6 +201,7 @@ def listen_transaction(ip, port):
                     continue
                 else:
                     transaction_pool.append(rec_transaction)
+                    broadcast_transaction(data.encode())
                     print('success, transaction pool len: ' + str(len(transaction_pool)))
                     conn.sendall('success'.encode('utf-8'))
 
@@ -95,19 +209,30 @@ def listen_transaction(ip, port):
 def proof_of_work(target, temp_block):
     nonce = int(20000000 * random.random())
     local_time = time.asctime(time.localtime(time.time()))
-    print('---start time: ' + local_time + '---')
+    print('---start mining time: ' + local_time + '---')
     while True:
-        block_str = str(temp_block) + str(nonce)
+        temp_block['nonce'] = nonce
+        block_str = str(temp_block)
         temp_hash = sha256(block_str.encode()).hexdigest()
-        block_target = temp_hash[-4:]
+        block_target = temp_hash[-6:]
         if block_target == target:
             break
         else:
             nonce = nonce + 1
 
     local_time = time.asctime(time.localtime(time.time()))
-    print('---end time: ' + local_time + '---')
-    return temp_hash, nonce
+    print('---end mining time: ' + local_time + '---')
+    block['nonce'] = nonce
+    block['hash'] = temp_hash
+    length = chain.find().count()
+    if block['index'] <= length:
+        print('mining to late')
+        pass
+    else:
+        broadcast_block(block)
+        chain.insert_one(block)
+        tree.insert_one(merkle_tree.Get_all_hash())
+
 
 
 if len(sys.argv) > 1:
@@ -128,6 +253,18 @@ if len(sys.argv) > 1:
         print('-c: create keys')
         print('-p: port')
         print('-a input address')
+    elif sys.argv[1] == '-sc':
+        client = pymongo.MongoClient(host='localhost', port=27017)
+        db = client.block_chain
+        chain = db.chain
+        request('chain')
+        sys.exit()
+    elif sys.argv[1] == '-st':
+        client = pymongo.MongoClient(host='localhost', port=27017)
+        db = client.block_chain
+        tree = db.tree
+        request('tree')
+        sys.exit()
     else:
         print('please use -h to check the usage')
         sys.exit()
@@ -140,11 +277,16 @@ client = pymongo.MongoClient(host='localhost', port=27017)
 db = client.block_chain
 chain = db.chain
 tree = db.tree
-try:
-    # start a new thread to listen transactions
-    _thread.start_new_thread(listen_transaction, ('', miner.port))
-except:
-    print('thread start error')
+
+# get neighours' ip and address
+neighbour_ip = list()
+neighbour_port = list()
+get_neighbours()
+# listen
+_thread.start_new_thread(listen_block_request, ('', 8889))
+_thread.start_new_thread(listen_block, ('', 8887))
+# start a new thread to listen transactions
+_thread.start_new_thread(listen_transaction, ('', miner.port))
 
 while True:
     if len(transaction_pool) < 7:
@@ -159,7 +301,7 @@ while True:
         block['time_stamp'] = time.time()
         block['prev_hash'] = chain.find_one({'index': chain_len})['hash']
         # cal time is around 60s using this target
-        block['target'] = '0000'
+        block['target'] = '000000'
         transactions = transaction_pool[0:7]
         transactions.append({'sour_address': None, 'dest_address': miner.address, 'amount': 20})
         block['transactions'] = transactions
@@ -172,10 +314,4 @@ while True:
         block['merkel_root'] = merkle_tree.Get_Root()
         for i in range(0, 7):
             transaction_pool.pop(6 - i)
-        print('---start to mining---')
-        block_hash, block_nonce = proof_of_work(block['target'], block)
-        block['hash'] = block_hash
-        block['nonce'] = block_nonce
-        print('---end of mining---')
-        chain.insert_one(block)
-        tree.insert_one(merkle_tree.Get_all_hash())
+        thread_mine = _thread.start_new_thread(proof_of_work, (block['target'], block))
