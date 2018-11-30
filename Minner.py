@@ -35,6 +35,15 @@ class Miner:
     #         self.neighbours[self.neighbours.index(ip)].remove_port(port)
 
 
+def broadcast_transaction_to_spv(temp_transaction,prev_transaction):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect(('159.65.148.98', 8888))
+    print('---broadcast_to_spv---')
+    s.sendall(temp_transaction)
+    s.sendall(prev_transaction)
+    s.close()
+
+
 def broadcast_transaction(temp_transaction):
     for temp_ip in neighbour_ip:
         temp_port = neighbour_port[neighbour_ip.index(temp_ip)]
@@ -142,6 +151,9 @@ def listen_block(ip, port):
                     print('---broadcast too late---')
                     continue
                 chain.insert_one(temp_block)
+                temp_tree = Merkle2.Merkletree(Trans=temp_block['transactions'])
+                temp_tree.make_tree()
+                tree.insert_one(temp_tree.all_hash)
                 print('---have verified the block and store---')
                 conn.close()
             else:
@@ -202,6 +214,7 @@ def listen_transaction(ip, port):
                 else:
                     transaction_pool.append(rec_transaction)
                     broadcast_transaction(data.encode())
+                    broadcast_transaction_to_spv(data.encode(), json.dumps(temp['transactions'][0]).encode())
                     print('success, transaction pool len: ' + str(len(transaction_pool)))
                     conn.sendall('success'.encode('utf-8'))
 
@@ -231,8 +244,7 @@ def proof_of_work(target, temp_block):
     else:
         broadcast_block(block)
         chain.insert_one(block)
-        tree.insert_one(merkle_tree.Get_all_hash())
-
+        tree.insert_one(merkle_tree.all_hash)
 
 
 if len(sys.argv) > 1:
@@ -310,8 +322,8 @@ while True:
             transactions_string.append(str(transaction))
 
         merkle_tree = Merkle2.Merkletree(transactions_string)
-        merkle_tree.Make_a_tree()
-        block['merkel_root'] = merkle_tree.Get_Root()
+        merkle_tree.make_tree()
+        block['merkel_root'] = merkle_tree.root
         for i in range(0, 7):
             transaction_pool.pop(6 - i)
         thread_mine = _thread.start_new_thread(proof_of_work, (block['target'], block))
