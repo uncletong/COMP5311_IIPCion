@@ -32,10 +32,10 @@ class Merkletree:
             parents = list()
             for j in range(0, len(temp_parents), 2):
                 lf_child = temp_parents[j]
-                if j+1 != len(temp_parents):
-                    rt_child = temp_parents[j+1]
-                else:
+                if j == len(temp_parents):
                     rt_child = temp_parents[j]
+                else:
+                    rt_child = temp_parents[j+1]
                 node = hashlib.sha256((lf_child + rt_child).encode()).hexdigest()
                 parents.append(node)
             all_hash[str_parent] = parents
