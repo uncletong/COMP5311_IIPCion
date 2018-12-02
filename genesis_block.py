@@ -29,12 +29,12 @@ transactions_string = list()
 for transaction in transactions:
     transactions_string.append(str(transaction.__dict__))
 merkle_tree = Merkle2.Merkletree(transactions_string)
-merkle_tree.Make_a_tree()
+merkle_tree.make_tree()
 block['index'] = 1
 block['time_stamp'] = time.time()
 block['pre_hash'] = None
 block['target'] = '000000'
-block['merkel_root'] = merkle_tree.Get_Root()
+block['merkel_root'] = merkle_tree.root
 block['transactions'] = transactions
 block['nonce'] = None
 block['hash'] = sha256(str(block).encode()).hexdigest()
@@ -47,6 +47,6 @@ dict_block = json.loads(json_str)
 collection_chain = db['chain']
 collection_tree = db['tree']
 collection_chain.insert_one(dict_block)
-collection_tree.insert_one(merkle_tree.Get_all_hash())
+collection_tree.insert_one(merkle_tree.all_hash)
 
 

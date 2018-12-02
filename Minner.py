@@ -214,7 +214,7 @@ def listen_transaction(ip, port):
                 else:
                     transaction_pool.append(rec_transaction)
                     broadcast_transaction(data.encode())
-                    broadcast_transaction_to_spv(data.encode(), json.dumps(temp['transactions'][0]).encode())
+                    #broadcast_transaction_to_spv(data.encode(), json.dumps(temp['transactions'][0]).encode())
                     print('success, transaction pool len: ' + str(len(transaction_pool)))
                     conn.sendall('success'.encode('utf-8'))
 
@@ -242,9 +242,12 @@ def proof_of_work(target, temp_block):
         print('mining to late')
         pass
     else:
-        broadcast_block(block)
-        chain.insert_one(block)
-        tree.insert_one(merkle_tree.all_hash)
+        try:
+            broadcast_block(block)
+            chain.insert_one(block)
+            tree.insert_one(merkle_tree.all_hash)
+        except:
+            pass
 
 
 if len(sys.argv) > 1:

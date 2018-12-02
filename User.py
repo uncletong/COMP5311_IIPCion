@@ -69,3 +69,5 @@ def primary():
             print(receive_message)
         finally:
             s.close()
+
+primary()
