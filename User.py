@@ -70,4 +70,4 @@ def primary():
         finally:
             s.close()
 
-primary()
+#primary()

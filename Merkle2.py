@@ -23,7 +23,7 @@ class Merkletree:
         leaf = list()
         #level = self.level
         for temp_transaction in Trans:
-            leaf.append(hashlib.sha256(temp_transaction.encode()).hexdigest())
+            leaf.append(hashlib.sha256(str(temp_transaction).encode()).hexdigest())
         temp_parents = leaf
         all_hash['leaf'] = leaf
         i = 1
